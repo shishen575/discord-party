@@ -173,7 +173,7 @@ wss.on('connection', (ws) => {
         if (pid === room.hostId) { room.playing = false; room.state = null; }
         break;
       case 'action':
-        if (room.playing) games[room.gameId].onAction(room, room.state, pid, msg.action ?? {});
+        if (room.playing) games[room.gameId].onAction(room, room.state, pid, msg.action ?? {}, () => broadcast(room));
         break;
     }
     broadcast(room);

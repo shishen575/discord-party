@@ -49,3 +49,18 @@ Cloudflare Zero Trust の Tunnels で、Public Hostname の Service を `http://
 環境変数 `ADMIN_IDS`(DiscordユーザーID、カンマ区切り)に入れたユーザーは、画面に「🛡 管理者」パネルが出て、
 **強制終了**(ロビーに戻す)と**主催者の奪取**ができます。IDはサーバー側で Discord のトークンを使って検証するので、画面からの偽装はできません。
 (ブラウザ単体のゲストモードでは検証できないため、管理者にはなれません)
+
+## みんなで動画(YouTube)
+主催者だけが再生・停止・シーク・次の動画を操作でき、全員の画面に同期されます。プレイリストには誰でもURLを追加できます(他人が追加した分を消せるのは主催者だけ)。
+
+**Discord Developer Portal → Activities → URL Mappings に次を追加してください**(`src/discord.js` の `YOUTUBE_MAPPINGS` と同じ prefix にします)
+
+| PREFIX | TARGET |
+|---|---|
+| `/youtube` | `www.youtube.com` |
+| `/youtube-nocookie` | `www.youtube-nocookie.com` |
+| `/ytimg` | `i.ytimg.com` |
+
+- Discord内で再生できないときは、開発者ツールのコンソールに「ブロックされたホスト」が出ます。そのホストを URL Mappings と `YOUTUBE_MAPPINGS` の両方に足してください。
+- 埋め込みが禁止されている動画(音楽の公式動画など)は再生できません。
+- 視聴者は最初に「タップして視聴に参加」を押す必要があります(ブラウザの自動再生制限のため)。

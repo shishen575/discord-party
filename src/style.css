@@ -39,3 +39,21 @@ input:focus { border-color:var(--accent); }
 .hostlist .btn { display:flex; align-items:center; gap:6px; color:var(--text); }
 
 .adminbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 12px; border:1px dashed #5b5f80; border-radius:12px; color:var(--sub); font-size:14px; }
+
+/* みんなで動画 */
+.watch { display:flex; flex-direction:column; gap:12px; }
+.stage { position:relative; aspect-ratio:16/9; background:#000; border-radius:12px; overflow:hidden; }
+.stage iframe, .stage #wPlayer { position:absolute; inset:0; width:100%; height:100%; }
+.shield { position:absolute; inset:0; z-index:2; }
+.join { position:absolute; inset:0; z-index:3; margin:auto; width:max-content; height:max-content; font-size:18px; padding:14px 22px; border:0; border-radius:12px; background:var(--accent); color:#fff; font-weight:700; cursor:pointer; }
+.err { position:absolute; left:10px; right:10px; bottom:10px; z-index:4; background:rgba(237,66,69,.9); padding:8px 12px; border-radius:8px; font-size:14px; }
+.np { display:flex; justify-content:space-between; gap:12px; color:var(--sub); font-size:14px; }
+.np span:first-child { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text); font-weight:600; }
+.pos { flex:none; font-variant-numeric:tabular-nums; }
+.plist { list-style:none; margin:0; padding:0; display:grid; gap:6px; }
+.plist li { display:flex; align-items:center; gap:8px; background:var(--panel); padding:8px 12px; border-radius:10px; }
+.plist li.cur { outline:2px solid var(--accent); }
+.plist li.empty { color:var(--sub); justify-content:center; }
+.plist .t { flex:1; min-width:0; display:flex; flex-direction:column; }
+.plist .t b { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.plist .t small { color:var(--sub); }

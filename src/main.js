@@ -26,29 +26,48 @@ function connect() {
   ws.onclose = () => setTimeout(connect, 1500); // 自動再接続
 }
 
-// 再描画しても入力中の文字とフォーカスを保つ
-function render() {
-  const active = document.activeElement;
-  const keep = active?.id && active.tagName === 'INPUT' ? { id: active.id, v: active.value, s: active.selectionStart } : null;
+// 再描画しても入力中の文字とフォーカスを保つ。
+// ゲーム画面は外枠を使い回し、中身(#game)の更新はゲーム側に任せる(動画プレイヤーを壊さないため)。
+let mode = null;
 
+function render() {
   const players = new Map(state.players.map((p) => [p.id, p]));
   const isHost = state.me === state.hostId;
   const game = state.playing ? games[state.gameId] : null;
-
-  app.innerHTML = '<main id="screen"></main>';
-  const screen = document.getElementById('screen');
+  const newMode = game ? `game:${state.gameId}` : 'lobby';
 
   if (game) {
-    screen.innerHTML = `<header><span>${esc(state.games.find((g) => g.id === state.gameId)?.name)}</span>
-      ${isHost ? '<button class="btn ghost small" id="back">ロビーへ</button>' : ''}</header><section id="game"></section>${hostMenuHtml(isHost)}${adminHtml()}`;
-    bindHostMenu(screen);
-    bindAdmin(screen);
+    if (mode !== newMode) {
+      app.innerHTML = `<main id="screen"><header id="hdr"></header><section id="game"></section><div id="ftr"></div></main>`;
+      mode = newMode;
+    }
+    const gameName = esc(state.games.find((g) => g.id === state.gameId)?.name);
+    const hdr = document.getElementById('hdr');
+    hdr.innerHTML = `<span>${gameName}</span>${isHost ? '<button class="btn ghost small" id="back">ロビーへ</button>' : ''}`;
     document.getElementById('back')?.addEventListener('click', () => send({ type: 'backToLobby' }));
-    game.render(document.getElementById('game'), { g: state.game, players, me: state.me, isHost, send: (action) => send({ type: 'action', action }) });
-  } else {
-    renderLobby(screen, players, isHost);
+    const ftr = document.getElementById('ftr');
+    ftr.innerHTML = `${hostMenuHtml(isHost)}${adminHtml()}`;
+    bindHostMenu(ftr);
+    bindAdmin(ftr);
+    const gameEl = document.getElementById('game');
+    const act = document.activeElement;
+    const keepIn = act?.tagName === 'INPUT' && act.id && gameEl.contains(act) ? { id: act.id, v: act.value, s: act.selectionStart } : null;
+    game.render(gameEl, {
+      g: state.game, players, me: state.me, isHost, serverOffset: state.game?.now ? state.game.now - Date.now() : 0,
+      send: (action) => send({ type: 'action', action }),
+    });
+    if (keepIn) {
+      const el = document.getElementById(keepIn.id);
+      if (el) { el.value = keepIn.v; el.focus(); el.setSelectionRange(keepIn.s, keepIn.s); }
+    }
+    return;
   }
 
+  const active = document.activeElement;
+  const keep = active?.id && active.tagName === 'INPUT' ? { id: active.id, v: active.value, s: active.selectionStart } : null;
+  app.innerHTML = '<main id="screen"></main>';
+  mode = newMode;
+  renderLobby(document.getElementById('screen'), players, isHost);
   if (keep) {
     const el = document.getElementById(keep.id);
     if (el) {
@@ -56,8 +75,6 @@ function render() {
       el.focus();
       el.setSelectionRange(keep.s, keep.s);
     }
-  } else {
-    app.querySelector('input')?.focus();
   }
 }
 

@@ -73,6 +73,7 @@ export default {
     }
 
     el.innerHTML = html;
+    el.querySelector('input')?.focus();
 
     el.querySelector('[data-f="topic"]')?.addEventListener('submit', (e) => {
       e.preventDefault();
