@@ -32,6 +32,7 @@ const fmt = (sec) => {
 let ctx = null;          // 最新の ctx
 let player = null;
 let ready = false;
+let playerStarted = false; // プレイヤーは最初の動画が決まってから作る(動画IDなしの埋め込みは404になる)
 let joined = false;      // 「タップして参加」を押したか (自動再生の制限対策)
 let loadedItemId = null; // プレイヤーに読み込んでいる曲
 let timer = null;
@@ -117,7 +118,12 @@ async function setupPlayer(el) {
   } catch (e) {
     return showError(el, `${e.message}${inDiscord ? '(Discord の URL Mappings に YouTube が設定されているか確認してください)' : ''}`);
   }
+  const first = current();
+  if (!first) { playerStarted = false; return; }
+  loadedItemId = first.id; // 作成時に読み込む(停止状態で待機)
+  hostLastPos = Math.max(0, targetPos());
   player = new window.YT.Player('wPlayer', {
+    videoId: first.videoId,
     width: '100%',
     height: '100%',
     // Discord内では埋め込みページも /youtube 経由で取得する
@@ -173,9 +179,10 @@ export default {
 
     if (first) {
       el.dataset.init = '1';
-      ready = false; player = null; joined = false; loadedItemId = null;
+      ready = false; player = null; joined = false; loadedItemId = null; playerStarted = false;
       el.innerHTML = `<div class="watch">
         <div class="stage"><div id="wPlayer"></div>
+          <div class="noVideo" id="wNoVideo">下の入力欄から YouTube の URL を追加してください</div>
           <div class="shield" id="wShield"></div>
           <button class="join" id="wJoin">▶ タップして視聴に参加</button>
           <div class="err" id="wErr" hidden></div></div>
@@ -202,11 +209,12 @@ export default {
       el.querySelector('#wCtl').addEventListener('click', (e) => {
         if (e.target.closest('[data-w="next"]')) ctx.send({ type: 'next' });
       });
-      setupPlayer(el);
     }
 
     // 主催者以外は動画の上に透明な膜を置いて、直接操作できないようにする
-    el.querySelector('#wShield').hidden = ctx.isHost;
+    el.querySelector('#wShield').hidden = ctx.isHost || !current();
+    el.querySelector('#wNoVideo').hidden = !!current();
+    el.querySelector('#wJoin').style.display = current() && !joined ? '' : 'none';
     el.querySelector('#wCtl').innerHTML = ctx.isHost
       ? '<button class="btn ghost small" data-w="next">⏭ 次の動画</button><span class="hint">再生・停止・シークは動画のコントロールで操作します</span>'
       : '<span class="hint">再生は主催者が操作します</span>';
@@ -214,6 +222,10 @@ export default {
     el.querySelector('#wNow').textContent = cur ? (cur.title ?? cur.videoId) : '動画を追加してください';
     el.querySelector('#wList').innerHTML = listHtml();
 
+    if (!playerStarted && current()) {
+      playerStarted = true;
+      setupPlayer(el);
+    }
     applyState();
   },
 };
