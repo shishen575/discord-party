@@ -1,137 +1,61 @@
 import { esc } from '../util.js';
+import { inDiscord, YOUTUBE_MAPPINGS } from '../discord.js';
+import { attemptRemap } from '@discord/embedded-app-sdk';
 
-// ---- YouTube プレイヤー (iframe を直接開き、postMessage で操作する方式) ----
-// Discord の中でも動くよう、IFrame API のスクリプトは使わず youtube-nocookie.com の埋め込みを直接開く。
-const YT = { ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5 };
-const ERR = { 2: 'URLが正しくありません', 5: '再生できない動画です', 100: '動画が見つかりません(非公開・削除)', 101: '埋め込みが禁止されている動画です', 150: '埋め込みが禁止されている動画です', 153: '埋め込みの設定エラーです' };
+// Discord内では最初から /.proxy 経由のURLにする(後からの書き換えに頼らない)
+const ytUrl = (u) => (inDiscord ? attemptRemap({ url: new URL(u), mappings: YOUTUBE_MAPPINGS }).toString() : u);
 
+// ---- YouTube IFrame API ----
+let apiPromise = null;
+function loadApi() {
+  if (apiPromise) return apiPromise;
+  apiPromise = new Promise((resolve, reject) => {
+    if (window.YT?.Player) return resolve();
+    const t = setTimeout(() => reject(new Error('YouTube の読み込みがタイムアウトしました')), 15000);
+    window.onYouTubeIframeAPIReady = () => { clearTimeout(t); resolve(); };
+    const s = document.createElement('script');
+    s.src = ytUrl('https://www.youtube.com/iframe_api');
+    s.onerror = () => { clearTimeout(t); reject(new Error('YouTube を読み込めませんでした')); };
+    document.head.appendChild(s);
+  });
+  return apiPromise;
+}
+
+const YT_STATE = { UNSTARTED: -1, ENDED: 0, PLAYING: 1, PAUSED: 2, BUFFERING: 3, CUED: 5 };
 const fmt = (sec) => {
   sec = Math.max(0, Math.floor(sec));
-  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, '0')}`;
+  const m = Math.floor(sec / 60), s = sec % 60;
+  return `${m}:${String(s).padStart(2, '0')}`;
 };
 
 // モジュール内の状態 (プレイヤーは画面更新をまたいで使い回す)
 let ctx = null;          // 最新の ctx
-let root = null;         // ゲーム画面の要素
-let iframe = null;
-let ready = false;       // iframe から最初の応答があったか
-let playerStarted = false;
+let player = null;
+let ready = false;
+let playerStarted = false; // プレイヤーは最初の動画が決まってから作る(動画IDなしの埋め込みは404になる)
 let joined = false;      // 「タップして参加」を押したか (自動再生の制限対策)
-let loadedItemId = null; // iframe に読み込んでいる曲
+let loadedItemId = null; // プレイヤーに読み込んでいる曲
 let timer = null;
-let handshakeTimer = null;
-let pState = -1, pTime = 0, pDur = 0;
 let hostLastPos = 0;
 let hostSeekGuard = 0;
-
-const post = (obj) => iframe?.contentWindow?.postMessage(JSON.stringify(obj), '*');
-const cmd = (func, args = []) => post({ event: 'command', func, args });
-
-// applyState などが使う、IFrame API 風のプレイヤー操作
-const player = {
-  getPlayerState: () => pState,
-  getCurrentTime: () => pTime,
-  getDuration: () => pDur,
-  playVideo: () => cmd('playVideo'),
-  pauseVideo: () => cmd('pauseVideo'),
-  stopVideo: () => cmd('stopVideo'),
-  seekTo: (t) => cmd('seekTo', [t, true]),
-  loadVideoById: ({ videoId, startSeconds }) => setSrc(videoId, startSeconds, true),
-  cueVideoById: ({ videoId, startSeconds }) => setSrc(videoId, startSeconds, false),
-};
-
-function showError(msg) {
-  const box = root?.querySelector('#wErr');
-  if (box) { box.hidden = false; box.textContent = msg; }
-}
-
-function setSrc(videoId, start, autoplay) {
-  ready = false;
-  pState = -1;
-  pTime = start || 0;
-  const q = new URLSearchParams({
-    autoplay: autoplay ? 1 : 0,
-    rel: 0,
-    playsinline: 1,
-    enablejsapi: 1,
-    modestbranding: 1,
-    controls: ctx.isHost ? 1 : 0,
-    disablekb: ctx.isHost ? 0 : 1,
-    start: Math.floor(start || 0),
-    origin: location.origin,
-  });
-  iframe.src = `https://www.youtube-nocookie.com/embed/${videoId}?${q}`;
-  startHandshake();
-}
-
-// 埋め込み側に「こちらは待ち受けている」と知らせ続け、応答があるまで繰り返す
-function startHandshake() {
-  clearInterval(handshakeTimer);
-  let n = 0;
-  handshakeTimer = setInterval(() => {
-    if (ready) return clearInterval(handshakeTimer);
-    if (++n > 40) {
-      clearInterval(handshakeTimer);
-      return showError('YouTube プレイヤーから応答がありません(埋め込み禁止の動画、または読み込めませんでした)');
-    }
-    post({ event: 'listening', id: 1, channel: 'widget' });
-  }, 500);
-}
-
-window.addEventListener('message', (e) => {
-  if (!iframe || e.source !== iframe.contentWindow) return;
-  let d;
-  try { d = typeof e.data === 'string' ? JSON.parse(e.data) : e.data; } catch { return; }
-  if (!d?.event) return;
-
-  const info = d.info;
-  let st = null;
-  if (d.event === 'onStateChange' && typeof info === 'number') st = info;
-  if (info && typeof info === 'object') {
-    if (info.currentTime != null) pTime = info.currentTime;
-    if (info.duration != null) pDur = info.duration;
-    if (info.playerState != null) st = info.playerState;
-  }
-  if (d.event === 'onError') showError(`再生エラー: ${ERR[info] ?? info}`);
-
-  if (!ready) {
-    ready = true;
-    clearInterval(handshakeTimer);
-    root?.querySelector('#wErr')?.setAttribute('hidden', '');
-    post({ event: 'command', func: 'addEventListener', args: ['onStateChange'] });
-    applyState();
-  }
-  if (st !== null && st !== pState) {
-    pState = st;
-    onStateChange(st);
-  }
-});
-
-// 主催者のプレイヤー操作を全員へ伝える
-function onStateChange(st) {
-  if (!ctx?.isHost) return;
-  const t = pTime;
-  if (st === YT.PLAYING && !ctx.g.playing) ctx.send({ type: 'play', pos: t });
-  else if (st === YT.PAUSED && ctx.g.playing) ctx.send({ type: 'pause', pos: t });
-  else if (st === YT.PLAYING) { hostSeekGuard = Date.now() + 1500; ctx.send({ type: 'seek', pos: t }); }
-  else if (st === YT.ENDED) ctx.send({ type: 'ended', itemId: loadedItemId });
-}
 
 // サーバー時刻で計算した「今あるべき再生位置」
 function targetPos() {
   const g = ctx.g;
   if (!g.playing) return g.pos;
-  return g.pos + (Date.now() + ctx.serverOffset - g.at) / 1000;
+  const serverNow = Date.now() + ctx.serverOffset;
+  return g.pos + (serverNow - g.at) / 1000;
 }
 
 const current = () => ctx.g.queue.find((q) => q.id === ctx.g.currentId) ?? null;
 
 function applyState() {
-  if (!ready || !iframe || !ctx) return;
+  if (!ready || !player || !ctx) return;
   const cur = current();
+  const host = ctx.isHost;
 
   if (!cur) {
-    if (loadedItemId !== null) { player.stopVideo(); loadedItemId = null; }
+    if (loadedItemId !== null) { player.stopVideo?.(); loadedItemId = null; }
     return;
   }
 
@@ -145,53 +69,88 @@ function applyState() {
     return;
   }
 
-  if (ctx.isHost) return; // 主催者のプレイヤーが基準。サーバーの状態では上書きしない
-  if (!joined) return;
+  if (host) return; // 主催者のプレイヤーが基準。サーバーの状態では上書きしない
 
   // 視聴者: サーバーの状態に合わせる
-  const st = pState;
+  if (!joined) return;
+  const st = player.getPlayerState?.();
   const want = targetPos();
   if (ctx.g.playing) {
-    if (st !== YT.PLAYING && st !== YT.BUFFERING) {
-      player.seekTo(want);
+    if (st !== YT_STATE.PLAYING && st !== YT_STATE.BUFFERING) {
+      player.seekTo(want, true);
       player.playVideo();
-    } else if (Math.abs(pTime - want) > 1.2) {
-      player.seekTo(want);
+    } else if (Math.abs(player.getCurrentTime() - want) > 1.2) {
+      player.seekTo(want, true);
     }
   } else {
-    if (st === YT.PLAYING || st === YT.BUFFERING) player.pauseVideo();
-    if (Math.abs(pTime - ctx.g.pos) > 0.5) player.seekTo(ctx.g.pos);
+    if (st === YT_STATE.PLAYING || st === YT_STATE.BUFFERING) player.pauseVideo();
+    if (Math.abs(player.getCurrentTime() - ctx.g.pos) > 0.5) player.seekTo(ctx.g.pos, true);
   }
 }
 
 function startTimer(el) {
   clearInterval(timer);
   timer = setInterval(() => {
-    if (!document.body.contains(el)) { clearInterval(timer); clearInterval(handshakeTimer); return; } // 画面が閉じたら停止
-    if (!ready || !ctx) return;
-    if (!ctx.isHost) applyState(); // 視聴者: 定期的にずれを補正
+    if (!document.body.contains(el)) { clearInterval(timer); return; } // 画面が閉じたら停止
+    if (!ready || !player || !ctx) return;
+    // 視聴者: 定期的にずれを補正
+    if (!ctx.isHost) applyState();
+    // 主催者: シーク操作を検出して全員に伝える
     else if (loadedItemId !== null && Date.now() > hostSeekGuard) {
-      // 主催者: シーク操作を検出して全員に伝える
-      if (pState === YT.PLAYING && Math.abs(pTime - hostLastPos) > 2.5) ctx.send({ type: 'seek', pos: pTime });
-      hostLastPos = pState === YT.PLAYING ? pTime + 1 : pTime;
+      const st = player.getPlayerState?.();
+      const t = player.getCurrentTime?.() ?? 0;
+      if (st === YT_STATE.PLAYING && Math.abs(t - hostLastPos) > 2.5) ctx.send({ type: 'seek', pos: t });
+      hostLastPos = st === YT_STATE.PLAYING ? t + 1 : t; // 次回の目安 (1秒ごとに1秒進む想定)
     }
     const posEl = el.querySelector('#wPos');
-    if (posEl) posEl.textContent = `${fmt(pTime)} / ${fmt(pDur)}`;
+    if (posEl && player.getCurrentTime) posEl.textContent = `${fmt(player.getCurrentTime())} / ${fmt(player.getDuration?.() || 0)}`;
   }, 1000);
 }
 
-function createIframe(el) {
+function showError(el, msg) {
+  const box = el.querySelector('#wErr');
+  if (box) { box.hidden = false; box.textContent = msg; }
+}
+
+async function setupPlayer(el) {
+  try {
+    await loadApi();
+  } catch (e) {
+    return showError(el, `${e.message}${inDiscord ? '(Discord の URL Mappings に YouTube が設定されているか確認してください)' : ''}`);
+  }
   const first = current();
   if (!first) { playerStarted = false; return; }
-  const holder = el.querySelector('#wPlayer');
-  iframe = document.createElement('iframe');
-  iframe.id = 'wFrame';
-  iframe.allow = 'autoplay; encrypted-media; picture-in-picture; fullscreen';
-  iframe.allowFullscreen = true;
-  holder.appendChild(iframe);
   loadedItemId = first.id; // 作成時に読み込む(停止状態で待機)
   hostLastPos = Math.max(0, targetPos());
-  setSrc(first.videoId, Math.max(0, targetPos()), false);
+  player = new window.YT.Player('wPlayer', {
+    videoId: first.videoId,
+    width: '100%',
+    height: '100%',
+    // Discord内では埋め込みページも /youtube 経由で取得する
+    ...(inDiscord ? { host: ytUrl('https://www.youtube.com').replace(/\/$/, '') } : {}),
+    playerVars: {
+      controls: ctx.isHost ? 1 : 0,
+      disablekb: ctx.isHost ? 0 : 1,
+      rel: 0,
+      playsinline: 1,
+      origin: location.origin,
+    },
+    events: {
+      onReady: () => { ready = true; applyState(); },
+      onError: (e) => {
+        const reasons = { 2: 'URLが正しくありません', 5: '再生できない動画です', 100: '動画が見つかりません(非公開・削除)', 101: '埋め込みが禁止されている動画です', 150: '埋め込みが禁止されている動画です', 153: '埋め込みの設定エラーです' };
+        showError(el, `再生エラー: ${reasons[e.data] ?? e.data}`);
+      },
+      onStateChange: (e) => {
+        if (!ctx?.isHost) return;
+        const t = player.getCurrentTime?.() ?? 0;
+        if (e.data === YT_STATE.PLAYING && !ctx.g.playing) ctx.send({ type: 'play', pos: t });
+        else if (e.data === YT_STATE.PAUSED && ctx.g.playing) ctx.send({ type: 'pause', pos: t });
+        else if (e.data === YT_STATE.PLAYING) { hostSeekGuard = Date.now() + 1500; ctx.send({ type: 'seek', pos: t }); }
+        else if (e.data === YT_STATE.ENDED) ctx.send({ type: 'ended', itemId: loadedItemId });
+      },
+    },
+  });
   startTimer(el);
 }
 
@@ -217,12 +176,10 @@ export default {
   render(el, c) {
     const first = !el.dataset.init;
     ctx = c;
-    root = el;
 
     if (first) {
       el.dataset.init = '1';
-      iframe = null; ready = false; joined = false; loadedItemId = null; playerStarted = false;
-      pState = -1; pTime = 0; pDur = 0;
+      ready = false; player = null; joined = false; loadedItemId = null; playerStarted = false;
       el.innerHTML = `<div class="watch">
         <div class="stage"><div id="wPlayer"></div>
           <div class="noVideo" id="wNoVideo">下の入力欄から YouTube の URL を追加してください</div>
@@ -265,9 +222,9 @@ export default {
     el.querySelector('#wNow').textContent = cur ? (cur.title ?? cur.videoId) : '動画を追加してください';
     el.querySelector('#wList').innerHTML = listHtml();
 
-    if (!playerStarted && cur) {
+    if (!playerStarted && current()) {
       playerStarted = true;
-      createIframe(el);
+      setupPlayer(el);
     }
     applyState();
   },
