@@ -14,7 +14,7 @@
         "Node.js 20": "ghcr.io/parkervcp/yolks:nodejs_20"
     },
     "file_denylist": [],
-    "startup": "if [ -n \"${CLOUDFLARE_TUNNEL_TOKEN}\" ] && [ -x ./cloudflared ]; then ./cloudflared tunnel --no-autoupdate run --token \"${CLOUDFLARE_TUNNEL_TOKEN}\" & fi; if [ ! -d node_modules ]; then npm install --include=dev; fi; if [ ! -f dist/index.html ] || [ \"${REBUILD}\" = \"1\" ]; then npm run build; fi; npm start",
+    "startup": "if [ -f scripts/start.sh ]; then bash scripts/start.sh; else echo \"プロジェクトがありません。アップロードするか GIT_ADDRESS を設定して再インストールしてください\"; fi",
     "config": {
         "files": "{}",
         "startup": "{\"done\": \"listening on\"}",
