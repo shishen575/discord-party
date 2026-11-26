@@ -37,3 +37,5 @@ input:focus { border-color:var(--accent); }
 .hostmenu summary { cursor:pointer; color:var(--sub); font-size:14px; }
 .hostlist { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
 .hostlist .btn { display:flex; align-items:center; gap:6px; color:var(--text); }
+
+.adminbar { display:flex; align-items:center; gap:10px; flex-wrap:wrap; padding:8px 12px; border:1px dashed #5b5f80; border-radius:12px; color:var(--sub); font-size:14px; }

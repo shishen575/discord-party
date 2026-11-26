@@ -15,7 +15,7 @@ function send(msg) {
 
 function connect() {
   ws = new WebSocket(wsUrl);
-  ws.onopen = () => send({ type: 'join', room: identity.room, user: identity.user });
+  ws.onopen = () => send({ type: 'join', room: identity.room, user: identity.user, token: identity.token });
   ws.onmessage = (e) => {
     const m = JSON.parse(e.data);
     if (m.type === 'state') {
@@ -40,8 +40,9 @@ function render() {
 
   if (game) {
     screen.innerHTML = `<header><span>${esc(state.games.find((g) => g.id === state.gameId)?.name)}</span>
-      ${isHost ? '<button class="btn ghost small" id="back">ロビーへ</button>' : ''}</header><section id="game"></section>${hostMenuHtml(isHost)}`;
+      ${isHost ? '<button class="btn ghost small" id="back">ロビーへ</button>' : ''}</header><section id="game"></section>${hostMenuHtml(isHost)}${adminHtml()}`;
     bindHostMenu(screen);
+    bindAdmin(screen);
     document.getElementById('back')?.addEventListener('click', () => send({ type: 'backToLobby' }));
     game.render(document.getElementById('game'), { g: state.game, players, me: state.me, isHost, send: (action) => send({ type: 'action', action }) });
   } else {
@@ -58,6 +59,23 @@ function render() {
   } else {
     app.querySelector('input')?.focus();
   }
+}
+
+// 管理者だけに表示するパネル
+function adminHtml() {
+  if (!state.isAdmin) return '';
+  return `<div class="adminbar"><b>🛡 管理者</b>
+    ${state.me !== state.hostId ? '<button class="btn small" data-adm="adminTakeHost">主催者になる</button>' : ''}
+    ${state.playing ? '<button class="btn ng small" data-adm="adminForceEnd">強制終了</button>' : ''}</div>`;
+}
+
+function bindAdmin(root) {
+  root.querySelectorAll('[data-adm]').forEach((b) =>
+    b.addEventListener('click', () => {
+      if (b.dataset.adm === 'adminForceEnd' && !confirm('ゲームを強制終了してロビーに戻しますか?')) return;
+      send({ type: b.dataset.adm });
+    }),
+  );
 }
 
 // 主催者だけに表示する「主催者を変更」メニュー
@@ -103,8 +121,9 @@ function renderLobby(screen, players, isHost) {
     ${isHost ? `<button class="btn primary big" id="start" ${canStart ? '' : 'disabled'}>${
       !sel ? 'ゲームを選んでください' : online.length < sel.minPlayers ? `あと${sel.minPlayers - online.length}人必要です` : 'スタート!'
     }</button>` : '<p class="hint">ホストの開始を待っています…</p>'}
-    ${hostMenuHtml(isHost)}`;
+    ${hostMenuHtml(isHost)}${adminHtml()}`;
   bindHostMenu(screen);
+  bindAdmin(screen);
   screen.querySelectorAll('[data-g]').forEach((b) => b.addEventListener('click', () => send({ type: 'selectGame', gameId: b.dataset.g })));
   document.getElementById('start')?.addEventListener('click', () => send({ type: 'start' }));
 }

@@ -46,6 +46,22 @@ function getRoom(id) {
   return rooms.get(id);
 }
 
+// 管理者(Discord ユーザーID。カンマ区切り)。サーバー側でトークンを検証して判定する
+const ADMIN_IDS = new Set((process.env.ADMIN_IDS || '').split(',').map((x) => x.trim()).filter(Boolean));
+const DISCORD_API = process.env.DISCORD_API_BASE || 'https://discord.com/api';
+
+// アクセストークンから本物のユーザー情報を取得(クライアント申告のIDは信用しない)
+async function verifyDiscordUser(token) {
+  try {
+    const r = await fetch(`${DISCORD_API}/users/@me`, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) return null;
+    const u = await r.json();
+    return u?.id ? String(u.id) : null;
+  } catch {
+    return null;
+  }
+}
+
 const send = (ws, msg) => ws.readyState === 1 && ws.send(JSON.stringify(msg));
 
 function broadcast(room) {
@@ -58,6 +74,7 @@ function broadcast(room) {
     send(p.ws, {
       type: 'state',
       me: p.id,
+      isAdmin: !!p.isAdmin,
       hostId: room.hostId,
       players,
       games: gameList(),
@@ -79,13 +96,30 @@ wss.on('connection', (ws) => {
   let room = null;
   let pid = null;
 
+  // 検証(非同期)が絡むので、メッセージは到着順に直列で処理する
+  let chain = Promise.resolve();
   ws.on('message', (raw) => {
+    chain = chain.then(() => handle(raw)).catch((e) => console.error(e));
+  });
+
+  async function handle(raw) {
     let msg;
     try { msg = JSON.parse(raw); } catch { return; }
 
     if (msg.type === 'join') {
+      let isAdmin = false;
+      let userId = String(msg.user.id);
+      if (msg.token) {
+        const verified = await verifyDiscordUser(msg.token);
+        if (verified) {
+          userId = verified; // 検証できたら本物のIDを使う
+          isAdmin = ADMIN_IDS.has(verified);
+        }
+      }
+      // 未検証の接続が管理者IDを名乗って本人の接続を乗っ取れないようにする
+      if (!isAdmin && ADMIN_IDS.has(userId)) userId = `unverified-${userId}`;
       room = getRoom(String(msg.room).slice(0, 64));
-      pid = String(msg.user.id);
+      pid = userId;
       const existing = room.players.get(pid);
       if (existing?.ws && existing.ws !== ws) existing.ws.close();
       room.players.set(pid, {
@@ -93,6 +127,7 @@ wss.on('connection', (ws) => {
         name: String(msg.user.name).slice(0, 32),
         avatar: msg.user.avatar || null,
         connected: true,
+        isAdmin,
         ws,
       });
       electHost(room);
@@ -120,6 +155,13 @@ wss.on('connection', (ws) => {
         if (pid === room.hostId && target?.connected) room.hostId = target.id;
         break;
       }
+      // ---- 管理者専用 ----
+      case 'adminTakeHost':
+        if (room.players.get(pid)?.isAdmin) room.hostId = pid;
+        break;
+      case 'adminForceEnd':
+        if (room.players.get(pid)?.isAdmin) { room.playing = false; room.state = null; }
+        break;
       case 'backToLobby':
         if (pid === room.hostId) { room.playing = false; room.state = null; }
         break;
@@ -128,7 +170,7 @@ wss.on('connection', (ws) => {
         break;
     }
     broadcast(room);
-  });
+  }
 
   ws.on('close', () => {
     if (!room || !pid) return;

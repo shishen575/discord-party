@@ -29,6 +29,7 @@ export async function setup() {
   const auth = await sdk.commands.authenticate({ access_token });
   const u = auth.user;
   return {
+    token: access_token, // サーバー側で本人確認(管理者判定)に使う
     room: sdk.instanceId,
     user: {
       id: u.id,

@@ -44,3 +44,8 @@ git リポジトリにこのプロジェクトを置いて `GIT_ADDRESS` を指�
 ### Cloudflare トンネルトークン(Egg変数)
 Egg の変数 `CLOUDFLARE_TUNNEL_TOKEN` にトークンを入れると、インストール時に取得した `cloudflared` が起動時に自動で動きます(空ならトンネルなし)。
 Cloudflare Zero Trust の Tunnels で、Public Hostname の Service を `http://localhost:<サーバーのポート>` にし、そのドメインを Discord の URL Mappings に設定してください。
+
+## 管理者
+環境変数 `ADMIN_IDS`(DiscordユーザーID、カンマ区切り)に入れたユーザーは、画面に「🛡 管理者」パネルが出て、
+**強制終了**(ロビーに戻す)と**主催者の奪取**ができます。IDはサーバー側で Discord のトークンを使って検証するので、画面からの偽装はできません。
+(ブラウザ単体のゲストモードでは検証できないため、管理者にはなれません)

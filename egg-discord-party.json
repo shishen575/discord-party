@@ -88,6 +88,16 @@
             "user_editable": true,
             "rules": "required|in:0,1",
             "field_type": "text"
+        },
+        {
+            "name": "Admin IDs",
+            "description": "管理者のDiscordユーザーID(カンマ区切り)。強制終了と、主催者の奪取ができます。",
+            "env_variable": "ADMIN_IDS",
+            "default_value": "1084318050976796832",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:255",
+            "field_type": "text"
         }
     ]
 }
