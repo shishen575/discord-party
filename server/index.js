@@ -85,14 +85,20 @@ function broadcast(room) {
   }
 }
 
+const HOST_GRACE_MS = Number(process.env.HOST_GRACE_MS) || 60_000; // 主催者が切断しても、この間は主催者の座を保つ
+
 function electHost(room) {
   const cur = room.players.get(room.hostId);
   if (cur?.connected) return;
+  // 一時的な切断(再読み込み・回線の揺れ)では主催者を替えない
+  if (cur && cur.graceUntil && cur.graceUntil > Date.now()) return;
   const next = [...room.players.values()].find((p) => p.connected);
   room.hostId = next?.id ?? null;
 }
 
 wss.on('connection', (ws) => {
+  ws.isAlive = true;
+  ws.on('pong', () => { ws.isAlive = true; });
   let room = null;
   let pid = null;
 
@@ -128,6 +134,7 @@ wss.on('connection', (ws) => {
         avatar: msg.user.avatar || null,
         connected: true,
         isAdmin,
+        graceUntil: 0,
         ws,
       });
       electHost(room);
@@ -178,12 +185,31 @@ wss.on('connection', (ws) => {
     if (!p || p.ws !== ws) return;
     p.connected = false;
     p.ws = null;
+    if (room.hostId === pid) {
+      // 主催者は猶予時間のあいだ座を保持。戻ってこなければ交代する
+      p.graceUntil = Date.now() + HOST_GRACE_MS;
+      const r = room;
+      setTimeout(() => {
+        if (!rooms.has(r.id)) return;
+        electHost(r);
+        broadcast(r);
+      }, HOST_GRACE_MS + 500);
+    }
     electHost(room);
     if (room.playing) games[room.gameId].onPlayerChange?.(room, room.state);
     if (![...room.players.values()].some((x) => x.connected)) rooms.delete(room.id);
     else broadcast(room);
   });
 });
+
+// 生存確認: 無通信での切断(Cloudflare は約100秒で切る)を防ぎ、死んだ接続は破棄する
+setInterval(() => {
+  for (const ws of wss.clients) {
+    if (!ws.isAlive) { ws.terminate(); continue; }
+    ws.isAlive = false;
+    ws.ping();
+  }
+}, 25_000);
 
 // Pterodactyl は割り当てポートを SERVER_PORT で渡す
 const port = process.env.SERVER_PORT || process.env.PORT || 3001;
