@@ -1,0 +1,83 @@
+{
+    "_comment": "DO NOT EDIT: FILE GENERATED AUTOMATICALLY BY PTERODACTYL PANEL - PTERODACTYL.IO",
+    "meta": {
+        "version": "PTDL_v2",
+        "update_url": null
+    },
+    "exported_at": "2026-11-26T13:30:00+00:00",
+    "name": "Discord Party Activity",
+    "author": "discord-party@example.com",
+    "description": "Discord アクティビティ用パーティーゲーム (全会一致ゲーム)。Node.js サーバー+フロントを配信します。",
+    "features": null,
+    "docker_images": {
+        "Node.js 22": "ghcr.io/parkervcp/yolks:nodejs_22",
+        "Node.js 20": "ghcr.io/parkervcp/yolks:nodejs_20"
+    },
+    "file_denylist": [],
+    "startup": "if [ ! -d node_modules ]; then npm install --include=dev; fi; if [ ! -f dist/index.html ] || [ \"${REBUILD}\" = \"1\" ]; then npm run build; fi; npm start",
+    "config": {
+        "files": "{}",
+        "startup": "{\"done\": \"listening on\"}",
+        "logs": "{}",
+        "stop": "^C"
+    },
+    "scripts": {
+        "installation": {
+            "script": "#!/bin/bash\n# Discord パーティーゲーム インストールスクリプト\napt-get update -y && apt-get install -y git ca-certificates\nmkdir -p /mnt/server && cd /mnt/server\nif [ -n \"${GIT_ADDRESS}\" ] && [ ! -f package.json ]; then\n  git clone --depth 1 ${GIT_BRANCH:+-b \"$GIT_BRANCH\"} \"${GIT_ADDRESS}\" . || { echo \"git clone に失敗しました\"; exit 1; }\nfi\nif [ -f package.json ]; then\n  npm install --include=dev\n  npm run build\nelse\n  echo \"package.json がありません。File Manager からプロジェクトをアップロードして展開するか、GIT_ADDRESS を設定して再インストールしてください。\"\nfi\necho \"install done\"\n",
+            "container": "node:20-bookworm-slim",
+            "entrypoint": "bash"
+        }
+    },
+    "variables": [
+        {
+            "name": "Discord Client ID",
+            "description": "Developer Portal の Application ID。ビルド時にフロントへ埋め込まれます(変更したら REBUILD=1 で再起動)。",
+            "env_variable": "VITE_DISCORD_CLIENT_ID",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:32",
+            "field_type": "text"
+        },
+        {
+            "name": "Discord Client Secret",
+            "description": "OAuth2 の Client Secret。",
+            "env_variable": "DISCORD_CLIENT_SECRET",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|string|max:128",
+            "field_type": "text"
+        },
+        {
+            "name": "Git Address",
+            "description": "プロジェクトを置いた git リポジトリURL。空ならアップロードで配置します(初回インストール時のみ使用)。",
+            "env_variable": "GIT_ADDRESS",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:255",
+            "field_type": "text"
+        },
+        {
+            "name": "Git Branch",
+            "description": "クローンするブランチ。空ならデフォルト。",
+            "env_variable": "GIT_BRANCH",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:64",
+            "field_type": "text"
+        },
+        {
+            "name": "Rebuild",
+            "description": "1 にすると起動時にフロントを再ビルドします(Client ID 変更後や更新後に使用)。",
+            "env_variable": "REBUILD",
+            "default_value": "0",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "required|in:0,1",
+            "field_type": "text"
+        }
+    ]
+}
