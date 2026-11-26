@@ -14,7 +14,7 @@
         "Node.js 20": "ghcr.io/parkervcp/yolks:nodejs_20"
     },
     "file_denylist": [],
-    "startup": "if [ ! -d node_modules ]; then npm install --include=dev; fi; if [ ! -f dist/index.html ] || [ \"${REBUILD}\" = \"1\" ]; then npm run build; fi; npm start",
+    "startup": "if [ -n \"${CLOUDFLARE_TUNNEL_TOKEN}\" ] && [ -x ./cloudflared ]; then ./cloudflared tunnel --no-autoupdate run --token \"${CLOUDFLARE_TUNNEL_TOKEN}\" & fi; if [ ! -d node_modules ]; then npm install --include=dev; fi; if [ ! -f dist/index.html ] || [ \"${REBUILD}\" = \"1\" ]; then npm run build; fi; npm start",
     "config": {
         "files": "{}",
         "startup": "{\"done\": \"listening on\"}",
@@ -23,7 +23,7 @@
     },
     "scripts": {
         "installation": {
-            "script": "#!/bin/bash\n# Discord パーティーゲーム インストールスクリプト\napt-get update -y && apt-get install -y git ca-certificates\nmkdir -p /mnt/server && cd /mnt/server\nif [ -n \"${GIT_ADDRESS}\" ] && [ ! -f package.json ]; then\n  git clone --depth 1 ${GIT_BRANCH:+-b \"$GIT_BRANCH\"} \"${GIT_ADDRESS}\" . || { echo \"git clone に失敗しました\"; exit 1; }\nfi\nif [ -f package.json ]; then\n  npm install --include=dev\n  npm run build\nelse\n  echo \"package.json がありません。File Manager からプロジェクトをアップロードして展開するか、GIT_ADDRESS を設定して再インストールしてください。\"\nfi\necho \"install done\"\n",
+            "script": "#!/bin/bash\n# Discord パーティーゲーム インストールスクリプト\napt-get update -y && apt-get install -y git ca-certificates curl\nmkdir -p /mnt/server && cd /mnt/server\nif [ -n \"${GIT_ADDRESS}\" ] && [ ! -f package.json ]; then\n  git clone --depth 1 ${GIT_BRANCH:+-b \"$GIT_BRANCH\"} \"${GIT_ADDRESS}\" . || { echo \"git clone に失敗しました\"; exit 1; }\nfi\nif [ -f package.json ]; then\n  npm install --include=dev\n  npm run build\nelse\n  echo \"package.json がありません。File Manager からプロジェクトをアップロードして展開するか、GIT_ADDRESS を設定して再インストールしてください。\"\nfi\n# cloudflared (Cloudflare Tunnel) を取得\ncase \"$(uname -m)\" in\n  x86_64) CF_ARCH=amd64 ;;\n  aarch64|arm64) CF_ARCH=arm64 ;;\n  *) CF_ARCH=\"\" ;;\nesac\nif [ -n \"$CF_ARCH\" ] && [ ! -x ./cloudflared ]; then\n  curl -fsSL -o cloudflared \"https://github.com/cloudflare/cloudflared/releases/latest/download/cloudflared-linux-${CF_ARCH}\" && chmod +x cloudflared || echo \"cloudflared の取得に失敗しました (トンネル不要なら無視してOK)\"\nfi\necho \"install done\"\n",
             "container": "node:20-bookworm-slim",
             "entrypoint": "bash"
         }
@@ -47,6 +47,16 @@
             "user_viewable": true,
             "user_editable": true,
             "rules": "required|string|max:128",
+            "field_type": "text"
+        },
+        {
+            "name": "Cloudflare Tunnel Token",
+            "description": "Cloudflare Zero Trust > Networks > Tunnels で発行したトークン。設定すると起動時に cloudflared も自動起動します。Public Hostname の Service は http://localhost:<このサーバーのポート> にしてください。空ならトンネルは使いません。",
+            "env_variable": "CLOUDFLARE_TUNNEL_TOKEN",
+            "default_value": "",
+            "user_viewable": true,
+            "user_editable": true,
+            "rules": "nullable|string|max:512",
             "field_type": "text"
         },
         {

@@ -40,3 +40,7 @@ Node.js 用の Egg(Generic Node.js など)で動きます。
 ### Egg(JSON)でインポートする
 `egg-discord-party.json` を Pterodactyl の Admin → Nests → Import Egg で読み込むと、変数(Client ID / Secret / Git URL など)付きでサーバーを作れます。
 git リポジトリにこのプロジェクトを置いて `GIT_ADDRESS` を指定するか、作成後に File Manager へアップロードしてください。
+
+### Cloudflare トンネルトークン(Egg変数)
+Egg の変数 `CLOUDFLARE_TUNNEL_TOKEN` にトークンを入れると、インストール時に取得した `cloudflared` が起動時に自動で動きます(空ならトンネルなし)。
+Cloudflare Zero Trust の Tunnels で、Public Hostname の Service を `http://localhost:<サーバーのポート>` にし、そのドメインを Discord の URL Mappings に設定してください。
