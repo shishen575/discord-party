@@ -29,6 +29,15 @@ else
   echo "[tunnel] CLOUDFLARE_TUNNEL_TOKEN が未設定のためトンネルは起動しません"
 fi
 
-[ -d node_modules ] || npm install --include=dev
-if [ ! -f dist/index.html ] || [ "${REBUILD:-0}" = "1" ]; then npm run build; fi
+# フロントのソース(と Client ID)が変わっていたら自動で再ビルドする
+SIG=$( { cat package-lock.json index.html vite.config.js 2>/dev/null; find src -type f | sort | xargs cat; echo "${VITE_DISCORD_CLIENT_ID:-}"; } | sha1sum | cut -d' ' -f1 )
+if [ ! -d node_modules ] || [ "$(cat dist/.sig-deps 2>/dev/null)" != "$(sha1sum < package-lock.json | cut -d' ' -f1)" ]; then
+  npm install --include=dev
+fi
+if [ ! -f dist/index.html ] || [ "$(cat dist/.sig 2>/dev/null)" != "$SIG" ] || [ "${REBUILD:-0}" = "1" ]; then
+  echo "[build] フロントをビルドします"
+  npm run build && echo "$SIG" > dist/.sig && sha1sum < package-lock.json | cut -d' ' -f1 > dist/.sig-deps
+else
+  echo "[build] フロントは最新です"
+fi
 exec npm start
