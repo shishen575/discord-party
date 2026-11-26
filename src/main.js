@@ -7,6 +7,7 @@ const app = document.getElementById('app');
 app.innerHTML = '<div class="center">読み込み中…</div>';
 
 let ws, state = null, identity;
+let hostMenuOpen = false;
 
 function send(msg) {
   if (ws?.readyState === 1) ws.send(JSON.stringify(msg));
@@ -39,7 +40,8 @@ function render() {
 
   if (game) {
     screen.innerHTML = `<header><span>${esc(state.games.find((g) => g.id === state.gameId)?.name)}</span>
-      ${isHost ? '<button class="btn ghost small" id="back">ロビーへ</button>' : ''}</header><section id="game"></section>`;
+      ${isHost ? '<button class="btn ghost small" id="back">ロビーへ</button>' : ''}</header><section id="game"></section>${hostMenuHtml(isHost)}`;
+    bindHostMenu(screen);
     document.getElementById('back')?.addEventListener('click', () => send({ type: 'backToLobby' }));
     game.render(document.getElementById('game'), { g: state.game, players, me: state.me, isHost, send: (action) => send({ type: 'action', action }) });
   } else {
@@ -56,6 +58,29 @@ function render() {
   } else {
     app.querySelector('input')?.focus();
   }
+}
+
+// 主催者だけに表示する「主催者を変更」メニュー
+function hostMenuHtml(isHost) {
+  if (!isHost) return '';
+  const others = state.players.filter((p) => p.connected && p.id !== state.me);
+  if (!others.length) return '';
+  return `<details class="hostmenu" ${hostMenuOpen ? 'open' : ''}><summary>👑 主催者を変更</summary>
+    <div class="hostlist">${others
+      .map((p) => `<button class="btn ghost small" data-host="${esc(p.id)}">${avatarHtml(p)} ${esc(p.name)}</button>`)
+      .join('')}</div></details>`;
+}
+
+function bindHostMenu(root) {
+  const d = root.querySelector('.hostmenu');
+  if (!d) return;
+  d.addEventListener('toggle', () => { hostMenuOpen = d.open; });
+  d.querySelectorAll('[data-host]').forEach((b) =>
+    b.addEventListener('click', () => {
+      hostMenuOpen = false;
+      send({ type: 'setHost', playerId: b.dataset.host });
+    }),
+  );
 }
 
 function renderLobby(screen, players, isHost) {
@@ -77,7 +102,9 @@ function renderLobby(screen, players, isHost) {
       .join('')}</div>
     ${isHost ? `<button class="btn primary big" id="start" ${canStart ? '' : 'disabled'}>${
       !sel ? 'ゲームを選んでください' : online.length < sel.minPlayers ? `あと${sel.minPlayers - online.length}人必要です` : 'スタート!'
-    }</button>` : '<p class="hint">ホストの開始を待っています…</p>'}`;
+    }</button>` : '<p class="hint">ホストの開始を待っています…</p>'}
+    ${hostMenuHtml(isHost)}`;
+  bindHostMenu(screen);
   screen.querySelectorAll('[data-g]').forEach((b) => b.addEventListener('click', () => send({ type: 'selectGame', gameId: b.dataset.g })));
   document.getElementById('start')?.addEventListener('click', () => send({ type: 'start' }));
 }

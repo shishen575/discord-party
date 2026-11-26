@@ -114,6 +114,12 @@ wss.on('connection', (ws) => {
         room.playing = true;
         break;
       }
+      case 'setHost': {
+        // 主催者だけが、接続中の別の参加者に主催者を譲れる
+        const target = room.players.get(String(msg.playerId));
+        if (pid === room.hostId && target?.connected) room.hostId = target.id;
+        break;
+      }
       case 'backToLobby':
         if (pid === room.hostId) { room.playing = false; room.state = null; }
         break;

@@ -32,3 +32,8 @@ input:focus { border-color:var(--accent); }
 .result.ok { background:rgba(59,165,93,.2); color:#6be08f; } .result.ng { background:rgba(237,66,69,.2); color:#ff8a8c; }
 .history { list-style:none; padding:0; margin:0; display:grid; gap:6px; } .history li { background:var(--panel); padding:10px 14px; border-radius:10px; }
 .pulse { text-align:center; color:var(--sub); animation:p 1.4s infinite; font-size:18px; } @keyframes p { 50% { opacity:.4; } }
+
+.hostmenu { background:var(--panel); border-radius:12px; padding:8px 12px; }
+.hostmenu summary { cursor:pointer; color:var(--sub); font-size:14px; }
+.hostlist { display:flex; flex-wrap:wrap; gap:8px; margin-top:10px; }
+.hostlist .btn { display:flex; align-items:center; gap:6px; color:var(--text); }
