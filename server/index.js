@@ -30,36 +30,6 @@ app.post('/api/token', async (req, res) => {
   }
 });
 
-// ---- YouTube 埋め込み用の中継 ----
-// Discord の /.proxy/youtube 経由で開いた埋め込みページは、自分の部品(/s/player/... など)を
-// 「先頭が / の相対URL」で読みに来るため、ルート(=このサーバー)に届く。許可した固定パスだけを YouTube へ中継する。
-const YT_ORIGIN = 'https://www.youtube.com';
-app.all(['/generate_204', '/error_204', '/ptracking', '/api/stats/*'], (req, res) => res.status(204).end());
-app.all(['/s/*', '/youtubei/*'], async (req, res) => {
-  if (req.method !== 'GET' && !(req.method === 'POST' && req.path.startsWith('/youtubei/'))) return res.status(405).end();
-  try {
-    const headers = {
-      'user-agent': req.headers['user-agent'] || 'Mozilla/5.0',
-      accept: req.headers.accept || '*/*',
-      'accept-language': req.headers['accept-language'] || 'ja,en;q=0.8',
-      origin: YT_ORIGIN,
-      referer: `${YT_ORIGIN}/`,
-    };
-    let body;
-    if (req.method === 'POST') {
-      headers['content-type'] = req.headers['content-type'] || 'application/json';
-      body = typeof req.body === 'string' ? req.body : JSON.stringify(req.body ?? {});
-    }
-    const r = await fetch(YT_ORIGIN + req.originalUrl, { method: req.method, headers, body, signal: AbortSignal.timeout(20000) });
-    res.status(r.status);
-    for (const h of ['content-type', 'cache-control', 'etag']) if (r.headers.get(h)) res.set(h, r.headers.get(h));
-    res.send(Buffer.from(await r.arrayBuffer()));
-  } catch (e) {
-    console.error('[yt-proxy]', req.originalUrl.slice(0, 80), e.message);
-    res.status(502).end();
-  }
-});
-
 app.get('/healthz', (_, res) => res.send('ok'));
 app.use(express.static(path.join(__dirname, '../dist')));
 

@@ -1,10 +1,4 @@
-import { DiscordSDK, patchUrlMappings } from '@discord/embedded-app-sdk';
-
-export const YOUTUBE_MAPPINGS = [
-  { prefix: '/youtube', target: 'www.youtube.com' },
-  { prefix: '/youtube-nocookie', target: 'www.youtube-nocookie.com' },
-  { prefix: '/ytimg', target: 'i.ytimg.com' },
-];
+import { DiscordSDK } from '@discord/embedded-app-sdk';
 
 const clientId = import.meta.env.VITE_DISCORD_CLIENT_ID;
 export const inDiscord = new URLSearchParams(location.search).has('frame_id');
@@ -33,8 +27,6 @@ export async function setup() {
   });
   const { access_token } = await res.json();
   const auth = await sdk.commands.authenticate({ access_token });
-  // YouTube 埋め込み用: Developer Portal の URL Mappings と同じ prefix にしておくこと
-  patchUrlMappings(YOUTUBE_MAPPINGS, { patchFetch: true, patchXhr: true, patchSrcAttributes: true });
   const u = auth.user;
   return {
     token: access_token, // サーバー側で本人確認(管理者判定)に使う
