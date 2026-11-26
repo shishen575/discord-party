@@ -1,5 +1,9 @@
 import { esc } from '../util.js';
-import { inDiscord } from '../discord.js';
+import { inDiscord, YOUTUBE_MAPPINGS } from '../discord.js';
+import { attemptRemap } from '@discord/embedded-app-sdk';
+
+// Discord内では最初から /.proxy 経由のURLにする(後からの書き換えに頼らない)
+const ytUrl = (u) => (inDiscord ? attemptRemap({ url: new URL(u), mappings: YOUTUBE_MAPPINGS }).toString() : u);
 
 // ---- YouTube IFrame API ----
 let apiPromise = null;
@@ -10,8 +14,7 @@ function loadApi() {
     const t = setTimeout(() => reject(new Error('YouTube の読み込みがタイムアウトしました')), 15000);
     window.onYouTubeIframeAPIReady = () => { clearTimeout(t); resolve(); };
     const s = document.createElement('script');
-    // Discord内では patchUrlMappings により /youtube 経由に書き換わる
-    s.src = 'https://www.youtube.com/iframe_api';
+    s.src = ytUrl('https://www.youtube.com/iframe_api');
     s.onerror = () => { clearTimeout(t); reject(new Error('YouTube を読み込めませんでした')); };
     document.head.appendChild(s);
   });
@@ -117,6 +120,8 @@ async function setupPlayer(el) {
   player = new window.YT.Player('wPlayer', {
     width: '100%',
     height: '100%',
+    // Discord内では埋め込みページも /youtube 経由で取得する
+    ...(inDiscord ? { host: ytUrl('https://www.youtube.com').replace(/\/$/, '') } : {}),
     playerVars: {
       controls: ctx.isHost ? 1 : 0,
       disablekb: ctx.isHost ? 0 : 1,
